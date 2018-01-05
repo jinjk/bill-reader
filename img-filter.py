@@ -15,11 +15,10 @@ def main(argv):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     (width, height) = image.shape[:2]
 
-    cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     # initialize a rectangular (wider than it is tall) and square
     # structuring kernel
     rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5))
-    sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
 
     gradX = gray.copy()
 
@@ -74,23 +73,22 @@ def main(argv):
         cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 2)
         cv2.putText(image, '%s' % idx, (x, y),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-        print("%s, %s, %s, %s" % (y, h, x, w))
 
-    #chars_image = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, sqKernel)
-    # imshow(chars_image)
+    chars_image = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, sqKernel)
+    imshow(chars_image)
 
-    chars_image = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                        cv2.THRESH_BINARY, 11, 20)
-    chars_image = gray
+    chars_image = chars_image
  
     for idx, cnt in enumerate(cnts):
         (x, y, w, h) = cv2.boundingRect(cnt)
-        section = gray[y:y+h, x:x+w]
-        cv2.imwrite("~/sources/test/%s.png" % idx, section)
+        section = chars_image[y:y+h, x:x+w]
+        im_show = section.copy()        
+        section = cv2.resize(section,None,fx=3, fy=3)
         pil_img = Image.fromarray(section)
         txt = pytesseract.image_to_string(pil_img, config = "--oem 1")
+        print("------------%s----------------" % idx)
         print(txt)
- 
+        imshow(im_show)
 
 def imshow(img):
     cv2.imshow('image', img)
