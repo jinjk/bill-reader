@@ -2,6 +2,8 @@ import cv2
 from imutils import contours
 import imutils
 import sys
+import math
+from functools import *
 import numpy as np
 import cv2.text as text
 from PIL import Image
@@ -44,44 +46,78 @@ class BillReader:
 
         cnts = [cnt for cnt in cnts if self.__is_table_cell(
             cnt, self.width, self.height)]
-        cnts.reverse()
+        cnts = self.__soft_contours(cnts)
 
-        self.__debug_image(cnts)
-
-        chars_image = cv2.morphologyEx(
-            self.gray, cv2.MORPH_BLACKHAT, self.sqKernel)
-        self.imshow(chars_image)
-
-        chars_image = chars_image
+        self.__debug_image(self.image, cnts)
 
         for idx, cnt in enumerate(cnts):
+            if idx >= 10:
+                continue
             (x, y, w, h) = cv2.boundingRect(cnt)
             section = self.__prepare_readable_section(self.gray, (x, y, w, h))
             pil_img = Image.fromarray(section)
-            txt = pytesseract.image_to_string(pil_img, config="--oem 1")
+            txt = pytesseract.image_to_string(
+                pil_img, config="--psm 11 --oem 1")
             print("------------%s----------------" % idx)
             print(txt)
             self.imshow(section)
 
-    def __debug_image(self, cnts):
+    def __soft_contours(self, cnts):
+        def compare_cnt(cnt1, cnt2):
+            (x1, y1, w1, h1) = cv2.boundingRect(cnt1)
+            (x2, y2, w2, h2) = cv2.boundingRect(cnt2)
+            if math.fabs(y1 - y2 ) < 10:
+                return x1 - x2
+            else:
+                return y1 - y2
+
+        cnts = sorted(cnts, key=cmp_to_key(compare_cnt))
+
+        return cnts
+
+    def __debug_image(self, image, cnts):
         if self.debug:
             for idx, cnt in enumerate(cnts):
                 (x, y, w, h) = cv2.boundingRect(cnt)
-                cv2.rectangle(self.image, (x, y),
+                cv2.rectangle(image, (x, y),
                               (x + w, y + h), (255, 0, 0), 2)
-                cv2.putText(self.image, '%s' % idx, (x, y),
+                cv2.putText(image, '%s' % idx, (x, y),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-            self.imshow(self.image)
+            self.imshow(image)
+
+    def __draw_contours(self, image, cnts):
+        self.debug = True
+        self.__debug_image(image, cnts)
+        self.debug = False
 
     def __prepare_readable_section(self, gray, rect):
         '''chop_minimum_text_image'''
         (x, y, w, h) = rect
         section = gray[y:y + h, x:x + w]
-        im_show = section.copy()
-        im_show = cv2.morphologyEx(im_show, cv2.WRITE_HAT, self.sqKernel)
-        self.imshow(im_show)
-        section = cv2.resize(section, None, fx=3, fy=3)
 
+        im_show = section.copy()
+
+        im_show = cv2.morphologyEx(im_show, cv2.MORPH_TOPHAT, self.rectKernel)
+        im_show = cv2.Sobel(im_show, cv2.CV_32F, dx=1, dy=0, ksize=-1)
+        im_show = np.absolute(im_show)
+        (minVal, maxVal) = (np.min(im_show), np.max(im_show))
+        im_show = (255 * ((im_show - minVal) / (maxVal - minVal)))
+        im_show = im_show.astype("uint8")
+        im_show = cv2.morphologyEx(im_show, cv2.MORPH_CLOSE, self.rectKernel)
+        im_show = cv2.threshold(im_show, 0, 255,
+                                cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+        im_show = cv2.morphologyEx(im_show, cv2.MORPH_CLOSE, self.sqKernel)
+        im2, cnts, hierarchy = cv2.findContours(im_show, cv2.RETR_LIST,
+                                                cv2.CHAIN_APPROX_SIMPLE)
+
+        def bottom(cnt):
+            (x, y, w, h) = cv2.boundingRect(cnt)
+            return y + h + 10
+
+        last_bottom = np.max([bottom(cnt) for cnt in cnts])
+
+        section = section[0:last_bottom, 0:w]
+        section = cv2.resize(section, None, fx=3, fy=3)
         return section
 
     ''' Check rect size to decide if the rect is a table cell '''
