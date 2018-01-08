@@ -61,11 +61,7 @@ def main(argv):
                                             cv2.CHAIN_APPROX_SIMPLE)
     del lines_image
 
-    def is_acceptable_rect(cnt):
-        (x, y, w, h) = cv2.boundingRect(cnt)
-        return w > 20 and h > 20 and (w * h < width * height / 2)
-
-    cnts = [cnt for cnt in cnts if is_acceptable_rect(cnt)]
+    cnts = [cnt for cnt in cnts if __is_table_cell(cnt, width, height)]
     cnts.reverse()
 
     for idx, cnt in enumerate(cnts):
@@ -78,17 +74,34 @@ def main(argv):
     imshow(chars_image)
 
     chars_image = chars_image
- 
+
     for idx, cnt in enumerate(cnts):
         (x, y, w, h) = cv2.boundingRect(cnt)
-        section = chars_image[y:y+h, x:x+w]
-        im_show = section.copy()        
-        section = cv2.resize(section,None,fx=3, fy=3)
+        section = __prepare_readable_section(chars_image, (x, y, w, h))
         pil_img = Image.fromarray(section)
-        txt = pytesseract.image_to_string(pil_img, config = "--oem 1")
+        txt = pytesseract.image_to_string(pil_img, config="--oem 1")
         print("------------%s----------------" % idx)
         print(txt)
-        imshow(im_show)
+        imshow(section)
+
+
+def __prepare_readable_section(chars_image, rect):
+    '''chop_minimum_text_image'''
+    (x, y, w, h) = rect
+    section = chars_image[y:y + h, x:x + w]
+    im_show = section.copy()
+    section = cv2.resize(im_show, None, fx=3, fy=3)
+
+    return section
+
+
+''' Check rect size to decide if the rect is a table cell '''
+
+
+def __is_table_cell(cnt, width, height):
+    (x, y, w, h) = cv2.boundingRect(cnt)
+    return w > 20 and h > 20 and (w * h < width * height / 2)
+
 
 def imshow(img):
     cv2.imshow('image', img)
